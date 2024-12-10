@@ -6,10 +6,12 @@ import traceback # Añadido para mejor manejo de errores
 
 # Deshabilitar transformaciones de hardware para evitar errores
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
+os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "1"
 
-# Inicializar MediaPipe Hands
+# Inicializar MediaPipe Hands para ambas cámaras
 mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7)
+hands1 = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7)
+hands2 = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7)
 
 def detectar_gesto(contorno, area):
     # Definir un umbral de área para distinguir entre mano abierta y cerrada
@@ -47,9 +49,7 @@ def detectar_gestos_avanzados(contorno):
         if rect_area == 0:
             return "Gesto no reconocido"
         extent = float(contour_area) / rect_area
-        if len(approx) <= 6 and aspect_ratio < 0.5 and solidity < 0.85:
-            return "Pulgar a un lado"
-        elif len(approx) >= 8 and aspect_ratio > 0.3 and aspect_ratio < 0.7:
+        if len(approx) >= 8 and aspect_ratio > 0.3 and aspect_ratio < 0.7:
             return "Señal de paz"
         else:
             return "Gesto no reconocido"
@@ -60,22 +60,19 @@ def detectar_gestos_avanzados(contorno):
 def main():
     try:
         print("Iniciando programa...")
-        # Inicializar ambas cámaras
         cap1 = cv2.VideoCapture(0)  # Primera cámara
         cap2 = cv2.VideoCapture(1)  # Segunda cámara
         
-        # Verificar primera cámara
         if not cap1.isOpened():
             print("Error: No se pudo abrir la cámara 1. Intentando con índice 0...")
-            cap1 = cv2.VideoCapture(0)
+            cap1 = cv2.VideoCapture(1)
             if not cap1.isOpened():
                 print("Error: No se pudo abrir la cámara 1")
                 return
 
-        # Verificar segunda cámara
         if not cap2.isOpened():
             print("Error: No se pudo abrir la cámara 2. Intentando con siguiente índice...")
-            cap2 = cv2.VideoCapture(3)
+            cap2 = cv2.VideoCapture(2)
             if not cap2.isOpened():
                 print("Error: No se pudo abrir la cámara 2")
                 return
@@ -83,11 +80,10 @@ def main():
         fps = 10  # Reducir a 10 fps
         size = (int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH)),
                 int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-        print(f"Resolución de cámara 1: {size}")
+        print(f"Resolución de cámara: {size}")
 
         while True:
             try:
-                # Leer frames de ambas cámaras
                 ret1, frame1 = cap1.read()
                 ret2, frame2 = cap2.read()
                 
@@ -101,10 +97,9 @@ def main():
                 rgb_frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
                 rgb_frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2RGB)
                 
-                results1 = hands.process(rgb_frame1)
-                results2 = hands.process(rgb_frame2)
+                results1 = hands1.process(rgb_frame1)
+                results2 = hands2.process(rgb_frame2)
 
-                # Crear copias de frames y máscaras negras
                 output_frame1 = frame1.copy()
                 output_frame2 = frame2.copy()
                 mascara_negra1 = np.zeros_like(frame1)
@@ -115,8 +110,9 @@ def main():
                 pos_x = 0
                 pos_y = 0
                 pos_z = 0
+                pos_x2 = 0  # Inicializar pos_x2 aquí
 
-                # Procesar cámara 1 (con detección de gestos)
+                # Procesar cámara 1
                 if results1.multi_hand_landmarks:
                     for hand_landmarks in results1.multi_hand_landmarks:
                         h, w, _ = frame1.shape
@@ -160,7 +156,7 @@ def main():
                         cv2.rectangle(output_frame1, (x_min, y_min), (x_max, y_max), (255, 0, 0), 2)
                         cv2.circle(output_frame1, (w//2 + pos_x, h//2 + pos_y), 5, (0, 255, 255), -1)
 
-                # Procesar cámara 2 (solo posición)
+                # Procesar cámara 2 (usando pos_y como pos_z)
                 if results2.multi_hand_landmarks:
                     for hand_landmarks in results2.multi_hand_landmarks:
                         h, w, _ = frame2.shape
@@ -172,7 +168,7 @@ def main():
                             y_list.append(int(lm.y * h))
 
                         pos_x2 = (sum(x_list) // len(x_list)) - (w // 2)
-                        pos_y2 = (sum(y_list) // len(y_list)) - (h // 2)
+                        pos_z = (sum(y_list) // len(y_list)) - (h // 2)
 
                         x_min = max(0, min(x_list) - 40)
                         y_min = max(0, min(y_list) - 40)
@@ -183,10 +179,24 @@ def main():
                         if roi.size == 0:
                             continue
 
+                        gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                        blurred = cv2.GaussianBlur(gray_roi, (7, 7), 0)
+                        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                        thresh = cv2.bitwise_not(thresh)
+
+                        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                        if contours:
+                            contorno_mano = max(contours, key=cv2.contourArea)
+                            area = cv2.contourArea(contorno_mano)
+
+                            if area > 3000:
+                                cv2.drawContours(roi, [contorno_mano], -1, (0, 255, 0), 3)
+
                         mascara_negra2[y_min:y_max, x_min:x_max] = roi
                         output_frame2 = mascara_negra2.copy()
                         cv2.rectangle(output_frame2, (x_min, y_min), (x_max, y_max), (255, 0, 0), 2)
-                        cv2.circle(output_frame2, (w//2 + pos_x2, h//2 + pos_y2), 5, (0, 255, 255), -1)
+                        cv2.circle(output_frame2, (w//2 + pos_x2, h//2 + pos_z), 5, (0, 255, 255), -1)
 
                 # Mostrar información en las ventanas
                 cv2.putText(output_frame1, f'Gesto: {gesture_basic} {gesture_advanced}', (10, 30),
@@ -194,7 +204,7 @@ def main():
                 cv2.putText(output_frame1, f'Pos: ({pos_x}, {pos_y})', (10, 70),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
-                cv2.putText(output_frame2, f'Pos: ({pos_x2}, {pos_y2})', (10, 30),
+                cv2.putText(output_frame2, f'Pos: ({pos_x2}, {pos_z})', (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
                 # Dibujar líneas de referencia
@@ -204,9 +214,8 @@ def main():
                 cv2.line(output_frame2, (w//2, 0), (w//2, h), (255, 255, 255), 1)
                 cv2.line(output_frame2, (0, h//2), (w, h//2), (255, 255, 255), 1)
 
-                # Mostrar ambas ventanas
                 cv2.imshow('Cámara 1 - Gestos', output_frame1)
-                cv2.imshow('Cámara 2 - Posición', output_frame2)
+                cv2.imshow('Cámara 2 - Profundidad', output_frame2)
 
                 if cv2.waitKey(int(1000/fps)) & 0xFF == ord('q'):
                     print("Programa terminado por el usuario")
