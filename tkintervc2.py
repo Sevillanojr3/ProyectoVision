@@ -382,11 +382,19 @@ class App:
                 roi_imgtk1 = ImageTk.PhotoImage(image=roi_img1)
                 self.label_roi1.configure(image=roi_imgtk1, width=150, height=150)
                 self.label_roi1.imgtk = roi_imgtk1
+                roi_img2 = Image.new('RGB', (150, 150), color='black')
+                roi_imgtk2 = ImageTk.PhotoImage(image=roi_img2)
+                self.label_roi2.configure(image=roi_imgtk2, width=150, height=150)
+                self.label_roi2.imgtk = roi_imgtk2
             else:
                 blank_image = Image.new('RGB', (150, 150), color='black')
                 blank_imgtk = ImageTk.PhotoImage(image=blank_image)
                 self.label_roi1.configure(image=blank_imgtk, width=150, height=150)
                 self.label_roi1.imgtk = blank_imgtk
+                blank_image = Image.new('RGB', (150, 150), color='black')
+                blank_imgtk = ImageTk.PhotoImage(image=blank_image)
+                self.label_roi2.configure(image=blank_imgtk, width=150, height=150)
+                self.label_roi2.imgtk = blank_imgtk
 
             # Actualizar etiquetas de información
             self.gesture_label.configure(text=f"Gesto: {gesture_basic}")
