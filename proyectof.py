@@ -20,7 +20,8 @@ hands1 = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_
 hands2 = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7)
 
 def detectar_gesto(contorno, area):
-    AREA_UMBRAL = 15000
+    AREA_UMBRAL = 50000
+    print(area)
     if area > AREA_UMBRAL:
         return "Mano abierta"
     else:
@@ -37,12 +38,13 @@ def detectar_dislike(contorno):
 
         solidity = float(contour_area) / hull_area
 
-        if 0.8 <= solidity <= 0.95:
+
+        if 0.5 <= solidity <= 0.7:
             epsilon = 0.02 * cv2.arcLength(contorno, True)
             approx = cv2.approxPolyDP(contorno, epsilon, True)
             x, y, w, h = cv2.boundingRect(contorno)
             aspect_ratio = float(w) / h
-            if 6 <= len(approx) <= 7 and 0.70 <= aspect_ratio <= 0.90:
+            if 10 <= len(approx) <= 12 and 0.68 <= aspect_ratio <= 0.90:
                 return True
         return False
     except:
@@ -56,15 +58,17 @@ def detectar_dino(contorno):
 
         if hull_area == 0:
             return False
+        
 
         solidity = float(contour_area) / hull_area
-        if 0.6 <= solidity <= 0.70:
+        print(solidity)
+        if 0.6 <= solidity <= 0.73:
             epsilon = 0.02 * cv2.arcLength(contorno, True)
             approx = cv2.approxPolyDP(contorno, epsilon, True)
-            print(len(approx))
             x, y, w, h = cv2.boundingRect(contorno)
             aspect_ratio = float(w) / h
-            if 8 <= len(approx) <= 9 and 1.0 <= aspect_ratio <= 1.46:
+            
+            if 8 <= len(approx) <= 10 and 0.89 <= aspect_ratio <= 1.46:
                 return True
         return False
     except:
@@ -81,7 +85,7 @@ def detectar_paz(contorno):
 
         solidity = float(contour_area) / hull_area
 
-        if 0.67 <= solidity <= 0.75:
+        if 0.55 <= solidity <= 0.75:
             epsilon = 0.02 * cv2.arcLength(contorno, True)
             approx = cv2.approxPolyDP(contorno, epsilon, True)
             x, y, w, h = cv2.boundingRect(contorno)
@@ -344,25 +348,41 @@ class App:
                             pos_z = roi_center_y - (h // 2)
 
                             roi2 = frame2[y_min:y_max, x_min:x_max]
-                            cv2.rectangle(output_frame2, (x_min, y_min), (x_max, y_max), (255, 0, 0), 2)
+                            if roi2.size > 0:  # Verificar que el ROI no esté vacío
+                                cv2.rectangle(output_frame2, (x_min, y_min), (x_max, y_max), (255, 0, 0), 2)
+                                # Procesar y mostrar ROI2
+                                roi_img2 = Image.fromarray(cv2.cvtColor(roi2, cv2.COLOR_BGR2RGB))
+                                # Calcular dimensiones manteniendo relación de aspecto
+                                roi_h, roi_w = roi2.shape[:2]
+                                aspect_ratio = roi_w / roi_h
+                                new_h = 150
+                                new_w = int(new_h * aspect_ratio)
+                                if new_w > 150:
+                                    new_w = 150
+                                    new_h = int(new_w / aspect_ratio)
+                                roi_img2 = roi_img2.resize((new_w, new_h), Image.LANCZOS)
+                                # Crear imagen negra de 150x150
+                                background = Image.new('RGB', (150, 150), color='black')
+                                # Calcular posición para centrar
+                                x_offset = (150 - new_w) // 2
+                                y_offset = (150 - new_h) // 2
+                                # Pegar ROI en el centro
+                                background.paste(roi_img2, (x_offset, y_offset))
+                                roi_imgtk2 = ImageTk.PhotoImage(image=background)
+                                self.label_roi2.imgtk = roi_imgtk2
+                                self.label_roi2.configure(image=roi_imgtk2)
+                            else:
+                                # Si el ROI está vacío, mostrar imagen en negro
+                                blank_image = Image.new('RGB', (150, 150), color='black')
+                                blank_imgtk = ImageTk.PhotoImage(image=blank_image)
+                                self.label_roi2.imgtk = blank_imgtk
+                                self.label_roi2.configure(image=blank_imgtk)
 
                     img2 = Image.fromarray(cv2.cvtColor(output_frame2, cv2.COLOR_BGR2RGB))
                     img2 = img2.resize((320, 240), Image.LANCZOS)
                     imgtk2 = ImageTk.PhotoImage(image=img2)
                     self.label_cam2.imgtk = imgtk2
                     self.label_cam2.configure(image=imgtk2)
-
-                    if roi2 is not None:
-                        roi_img2 = Image.fromarray(cv2.cvtColor(roi2, cv2.COLOR_BGR2RGB))
-                        roi_img2 = roi_img2.resize((150, 150), Image.LANCZOS)
-                        roi_imgtk2 = ImageTk.PhotoImage(image=roi_img2)
-                        self.label_roi2.configure(image=roi_imgtk2, width=150, height=150)
-                        self.label_roi2.imgtk = roi_imgtk2
-                    else:
-                        blank_image = Image.new('RGB', (150, 150), color='black')
-                        blank_imgtk = ImageTk.PhotoImage(image=blank_image)
-                        self.label_roi2.configure(image=blank_imgtk, width=150, height=150)
-                        self.label_roi2.imgtk = blank_imgtk
 
             # Actualizar gráfico 3D
             if self.num_camaras == 1:
@@ -380,21 +400,13 @@ class App:
                 roi_img1 = Image.fromarray(cv2.cvtColor(roi1, cv2.COLOR_BGR2RGB))
                 roi_img1 = roi_img1.resize((150, 150), Image.LANCZOS)
                 roi_imgtk1 = ImageTk.PhotoImage(image=roi_img1)
-                self.label_roi1.configure(image=roi_imgtk1, width=150, height=150)
+                self.label_roi1.configure(image=roi_imgtk1)
                 self.label_roi1.imgtk = roi_imgtk1
-                roi_img2 = Image.new('RGB', (150, 150), color='black')
-                roi_imgtk2 = ImageTk.PhotoImage(image=roi_img2)
-                self.label_roi2.configure(image=roi_imgtk2, width=150, height=150)
-                self.label_roi2.imgtk = roi_imgtk2
             else:
                 blank_image = Image.new('RGB', (150, 150), color='black')
                 blank_imgtk = ImageTk.PhotoImage(image=blank_image)
-                self.label_roi1.configure(image=blank_imgtk, width=150, height=150)
+                self.label_roi1.configure(image=blank_imgtk)
                 self.label_roi1.imgtk = blank_imgtk
-                blank_image = Image.new('RGB', (150, 150), color='black')
-                blank_imgtk = ImageTk.PhotoImage(image=blank_image)
-                self.label_roi2.configure(image=blank_imgtk, width=150, height=150)
-                self.label_roi2.imgtk = blank_imgtk
 
             # Actualizar etiquetas de información
             self.gesture_label.configure(text=f"Gesto: {gesture_basic}")
